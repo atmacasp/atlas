@@ -79,42 +79,6 @@ function linkifyKnownTitles(content: string, notes: Note[], sourceTitle: string)
   }).join("");
 }
 
-function parseNote(");
-}
-function linkedTitles(content: string, notes: Note[], sourceTitle: string): string[] {
-  const found = new Set(extractLinks(content).map(title => title.toLocaleLowerCase("tr-TR")));
-  const body = stripFrontmatter(content);
-  for (const note of notes) {
-    if (note.title.toLocaleLowerCase("tr-TR") === sourceTitle.toLocaleLowerCase("tr-TR")) continue;
-    const title = note.title.trim();
-    if (!title) continue;
-    const pattern = new RegExp("(^|[^A-Za-z0-9_ÇĞİÖŞÜçğıöşü])" + escapeRegExp(title) + "(?=$|[^A-Za-z0-9_ÇĞİÖŞÜçğıöşü])", "iu");
-    if (pattern.test(body)) found.add(title.toLocaleLowerCase("tr-TR"));
-  }
-  return notes.filter(note => found.has(note.title.toLocaleLowerCase("tr-TR"))).map(note => note.title);
-}
-function linkifyKnownTitles(content: string, notes: Note[], sourceTitle: string) {
-  const explicit = content.replace(WIKI_RE, (_match, raw: string) => {
-    const title = raw.trim();
-    return "[" + title + "](wiki:" + encodeURIComponent(title) + ")";
-  });
-  const protectedChunks = explicit.split(/(\\[[^\\]]*\\]\\([^)]*\\))/g);
-  const titles = notes
-    .filter(note => note.title.toLocaleLowerCase("tr-TR") !== sourceTitle.toLocaleLowerCase("tr-TR"))
-    .map(note => note.title.trim())
-    .filter(Boolean)
-    .sort((a, b) => b.length - a.length);
-  return protectedChunks.map(chunk => {
-    if (/^\\[[^\\]]*\\]\\([^)]*\\)$/.test(chunk)) return chunk;
-    let result = chunk;
-    for (const title of titles) {
-      const pattern = new RegExp("(^|[^A-Za-z0-9_ÇĞİÖŞÜçğıöşü])(" + escapeRegExp(title) + ")(?=$|[^A-Za-z0-9_ÇĞİÖŞÜçğıöşü])", "giu");
-      result = result.replace(pattern, (_match, prefix: string, matched: string) => prefix + "[" + matched + "](wiki:" + encodeURIComponent(title) + ")");
-    }
-    return result;
-  }).join("");
-}
-
 function parseNote(id: string, file: string, content: string): Note {
   return { id, file, content, title: titleFromMarkdown(content, file.replace(/\.md$/, "")), links: extractLinks(content), tags: extractTags(content) };
 }
