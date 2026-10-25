@@ -9,7 +9,7 @@ import Svg, { Line } from "react-native-svg";
 import * as FileSystem from "expo-file-system/legacy";
 import { SEED_NOTES, SeedNote } from "./src/seedNotes";
 
-type Note = { id: string; title: string; file: string; content: string; links: string[] };
+type Note = { id: string; title: string; file: string; content: string; links: string[]; tags: string[] };
 type Tab = "wiki" | "search" | "graph" | "edit";
 const VAULT_DIR = `${FileSystem.documentDirectory}knowledge-vault/`;
 const WIKI_RE = /\[\[([^\]]+)\]\]/g;
@@ -27,8 +27,60 @@ function titleFromMarkdown(content: string, fallback: string) {
 function extractLinks(content: string) {
   return [...content.matchAll(WIKI_RE)].map(m => m[1].trim()).filter(Boolean);
 }
+function extractTags(content: string): string[] {
+  const match = content.match(/^tags:\s*\[(.*?)\]\s*$/m);
+  if (!match) return [];
+  return [...match[1].matchAll(/"((?:\\.|[^"\\])*)"|'((?:\\.|[^'\\])*)'|([^,]+)/g)]
+    .map(m => (m[1] ?? m[2] ?? m[3] ?? "").trim().replace(/\\(["'])/g, "$1"))
+    .filter(Boolean)
+    .map(tag => tag.toLocaleLowerCase("tr-TR"));
+}
+function stripFrontmatter(content: string) {
+  return content.replace(/^---\s*\n[\s\S]*?\n---\s*\n?/, "");
+}
+function cleanMarkdown(content: string) {
+  return stripFrontmatter(content).replace(/[#>*`\-\[\]!]/g, " ").replace(/\s+/g, " ").trim();
+}
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^$\\{}()|[\]\\]/g, "\\$&");
+}
+function linkedTitles(content: string, notes: Note[], sourceTitle: string): string[] {
+  const found = new Set(extractLinks(content).map(title => title.toLocaleLowerCase("tr-TR")));
+  const body = stripFrontmatter(content);
+  for (const note of notes) {
+    if (note.title.toLocaleLowerCase("tr-TR") === sourceTitle.toLocaleLowerCase("tr-TR")) continue;
+    const title = note.title.trim();
+    if (!title) continue;
+    const pattern = new RegExp("(^|[^A-Za-z0-9_ÇĞİÖŞÜçğıöşü])" + escapeRegExp(title) + "(?=$|[^A-Za-z0-9_ÇĞİÖŞÜçğıöşü])", "iu");
+    if (pattern.test(body)) found.add(title.toLocaleLowerCase("tr-TR"));
+  }
+  return notes.filter(note => found.has(note.title.toLocaleLowerCase("tr-TR"))).map(note => note.title);
+}
+function linkifyKnownTitles(content: string, notes: Note[], sourceTitle: string) {
+  const explicit = content.replace(WIKI_RE, (_match, raw: string) => {
+    const title = raw.trim();
+    return "[" + title + "](wiki:" + encodeURIComponent(title) + ")";
+  });
+  const protectedChunks = explicit.split(/(\[[^\]]*\]\([^)]*\))/g);
+  const titles = notes
+    .filter(note => note.title.toLocaleLowerCase("tr-TR") !== sourceTitle.toLocaleLowerCase("tr-TR"))
+    .map(note => note.title.trim())
+    .filter(Boolean)
+    .sort((a, b) => b.length - a.length);
+  return protectedChunks.map(chunk => {
+    if (/^\[[^\]]*\]\([^)]*\)$/.test(chunk)) return chunk;
+    if (!titles.length) return chunk;
+    const alternatives = titles.map(escapeRegExp).join("|");
+    const pattern = new RegExp("(^|[^A-Za-z0-9_ÇĞİÖŞÜçğıöşü])(" + alternatives + ")(?=$|[^A-Za-z0-9_ÇĞİÖŞÜçğıöşü])", "giu");
+    return chunk.replace(pattern, (_match, prefix: string, matched: string) => {
+      const canonical = titles.find(title => title.toLocaleLowerCase("tr-TR") === matched.toLocaleLowerCase("tr-TR")) || matched;
+      return prefix + "[" + matched + "](wiki:" + encodeURIComponent(canonical) + ")";
+    });
+  }).join("");
+}
+
 function parseNote(id: string, file: string, content: string): Note {
-  return { id, file, content, title: titleFromMarkdown(content, file.replace(/\.md$/, "")), links: extractLinks(content) };
+  return { id, file, content, title: titleFromMarkdown(content, file.replace(/\.md$/, "")), links: extractLinks(content), tags: extractTags(content) };
 }
 async function ensureVault() {
   const info = await FileSystem.getInfoAsync(VAULT_DIR);
@@ -56,7 +108,9 @@ export default function App() {
   const [activeId, setActiveId] = useState("index");
   const [tab, setTab] = useState<Tab>("wiki");
   const [query, setQuery] = useState("");
+  const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [draftTitle, setDraftTitle] = useState("");
+  const [draftTags, setDraftTags] = useState("");
   const [draftContent, setDraftContent] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [busy, setBusy] = useState(true);
@@ -88,29 +142,44 @@ export default function App() {
   }, [notes]);
   const backlinks = useMemo(() => {
     if (!active) return [];
-    return notes.filter(n => n.id !== active.id && n.links.some(l => l.toLocaleLowerCase("tr-TR") === active.title.toLocaleLowerCase("tr-TR")));
+    return notes.filter(n => n.id !== active.id && linkedTitles(n.content, notes, n.title)
+      .some(title => title.toLocaleLowerCase("tr-TR") === active.title.toLocaleLowerCase("tr-TR")));
   }, [notes, active]);
+  const allTags = useMemo(() => [...new Set(notes.flatMap(n => n.tags))].sort((a, b) => a.localeCompare(b, "tr-TR")), [notes]);
   const filtered = useMemo(() => {
     const q = query.trim().toLocaleLowerCase("tr-TR");
-    if (!q) return notes;
-    return notes.filter(n => `${n.title}\n${n.content}`.toLocaleLowerCase("tr-TR").includes(q));
-  }, [notes, query]);
+    return notes.filter(n => {
+      const matchesText = !q || `${n.title}\n${n.content}\n${n.tags.join(" ")}`.toLocaleLowerCase("tr-TR").includes(q);
+      const matchesTags = selectedTags.every(tag => n.tags.includes(tag));
+      return matchesText && matchesTags;
+    });
+  }, [notes, query, selectedTags]);
 
   const openNote = (note: Note) => { setActiveId(note.id); setTab("wiki"); };
   const createNote = () => {
-    setEditingId(null); setDraftTitle(""); setDraftContent("# Yeni kavram\n\n## Nedir?\n\n## Nasıl çalışır?\n\n## İlişkili kavramlar\n\n");
+    setEditingId(null); setDraftTitle(""); setDraftTags(""); setDraftContent("");
     setTab("edit");
   };
   const editNote = () => {
     if (!active) return;
-    setEditingId(active.id); setDraftTitle(active.title); setDraftContent(active.content); setTab("edit");
+    setEditingId(active.id); setDraftTitle(active.title); setDraftTags(active.tags.join(", ")); setDraftContent(stripFrontmatter(active.content)); setTab("edit");
   };
   const saveNote = async () => {
     const title = draftTitle.trim();
     if (!title) { Alert.alert("Başlık gerekli", "Not için bir başlık gir."); return; }
     const id = editingId || slugify(title);
     const file = `${id}.md`;
-    const content = `---\ntitle: "${title.replace(/"/g, "'")}"\ntype: concept\nupdated: ${new Date().toISOString().slice(0, 10)}\n---\n\n${draftContent.trim()}\n`;
+    const tags = [...new Set(draftTags.split(",").map(tag => tag.trim().toLocaleLowerCase("tr-TR")).filter(Boolean))];
+    const tagLine = `tags: [${tags.map(tag => JSON.stringify(tag)).join(", ")}]`;
+    const content = `---
+title: "${title.replace(/"/g, "'")}"
+type: concept
+${tagLine}
+updated: ${new Date().toISOString().slice(0, 10)}
+---
+
+${stripFrontmatter(draftContent).trim()}
+`;
     try {
       await FileSystem.writeAsStringAsync(`${VAULT_DIR}${file}`, content, { encoding: FileSystem.EncodingType.UTF8 });
       await refresh(id);
@@ -128,13 +197,20 @@ export default function App() {
     ]);
   };
 
-  const renderNoteRow = ({ item }: { item: Note }) => (
-    <Pressable style={styles.resultRow} onPress={() => openNote(item)}>
-      <Text style={styles.resultTitle}>{item.title}</Text>
-      <Text style={styles.resultMeta} numberOfLines={2}>{item.content.replace(/[#>*`\-\[\]]/g, " ").replace(/\s+/g, " ").slice(0, 150)}</Text>
-      <Text style={styles.resultMeta}>{item.links.length} bağlantı · {item.file}</Text>
-    </Pressable>
-  );
+  const renderNoteRow = ({ item }: { item: Note }) => {
+    const plain = cleanMarkdown(item.content);
+    const q = query.trim().toLocaleLowerCase("tr-TR");
+    const at = q ? plain.toLocaleLowerCase("tr-TR").indexOf(q) : -1;
+    const snippet = at >= 0 ? `${at > 45 ? "…" : ""}${plain.slice(Math.max(0, at - 45), at + q.length + 85)}${at + q.length + 85 < plain.length ? "…" : ""}` : plain.slice(0, 150);
+    return (
+      <Pressable style={styles.resultRow} onPress={() => openNote(item)}>
+        <Text style={styles.resultTitle}>{item.title}</Text>
+        <Text style={styles.resultMeta} numberOfLines={3}>{snippet || "İçerik boş."}</Text>
+        {item.tags.length > 0 && <Text style={styles.tagLine}>{item.tags.map(tag => `#${tag}`).join("  ")}</Text>}
+        <Text style={styles.resultMeta}>{linkedTitles(item.content, notes, item.title).length} bağlantı · {item.file}</Text>
+      </Pressable>
+    );
+  };
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -144,7 +220,7 @@ export default function App() {
           <Text style={styles.brand}>ATLAS</Text>
           <Text style={styles.subtitle}>Kişisel ilişkisel bilgi ağı</Text>
         </View>
-        <Pressable style={styles.primaryButton} onPress={createNote}><Text style={styles.primaryButtonText}>＋ Not</Text></Pressable>
+        <Pressable style={styles.primaryButton} onPress={createNote}><Text style={styles.primaryButtonText}>＋ Başlık aç</Text></Pressable>
       </View>
       <View style={styles.tabs}>
         {([["wiki", "Wiki"], ["search", "Ara"], ["graph", "Graf"], ["edit", "Düzenle"]] as [Tab, string][]).map(([key, label]) => (
@@ -169,7 +245,7 @@ export default function App() {
                   else Alert.alert("Sayfa bulunamadı", `“${title}” başlıklı not henüz oluşturulmadı.`);
                   return false;
                 }}>
-                  {active.content.replace(/^---[\s\S]*?---\s*/, "").replace(/\[\[([^\]]+)\]\]/g, "[$1](wiki:$1)")}
+                  {linkifyKnownTitles(active.content.replace(/^---[\s\S]*?---\s*/, ""), notes, active.title)}
                 </Markdown>
               </View>
               <View style={styles.section}>
@@ -184,8 +260,21 @@ export default function App() {
           )}
           {tab === "search" && (
             <View style={styles.flex}>
-              <TextInput value={query} onChangeText={setQuery} placeholder="Kavram, başlık veya içerik ara…" placeholderTextColor="#7C8798" style={styles.searchInput} autoCorrect={false} />
-              <Text style={styles.resultCount}>{filtered.length} sonuç · Markdown dosyalarından otomatik oluşturulan indeks</Text>
+              <TextInput value={query} onChangeText={setQuery} placeholder="Başlık, içerik veya etiket ara…" placeholderTextColor="#7C8798" style={styles.searchInput} autoCorrect={false} />
+              {allTags.length > 0 ? (
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tagFilters}>
+                  <Pressable onPress={() => setSelectedTags([])} style={[styles.filterChip, selectedTags.length === 0 && styles.filterChipActive]}>
+                    <Text style={[styles.filterChipText, selectedTags.length === 0 && styles.filterChipTextActive]}>Tüm etiketler</Text>
+                  </Pressable>
+                  {allTags.map(tag => {
+                    const selected = selectedTags.includes(tag);
+                    return <Pressable key={tag} onPress={() => setSelectedTags(current => selected ? current.filter(t => t !== tag) : [...current, tag])} style={[styles.filterChip, selected && styles.filterChipActive]}>
+                      <Text style={[styles.filterChipText, selected && styles.filterChipTextActive]}>#{tag}</Text>
+                    </Pressable>;
+                  })}
+                </ScrollView>
+              ) : <Text style={styles.hint}>Henüz etiket yok. Not düzenlerken etiketleri virgülle ayırarak ekleyebilirsin.</Text>}
+              <Text style={styles.resultCount}>{filtered.length} / {notes.length} sonuç · Başlık, içerik ve etiketlerde arama</Text>
               <FlatList data={filtered} keyExtractor={n => n.id} renderItem={renderNoteRow} contentContainerStyle={{ paddingBottom: 30 }} ListEmptyComponent={<Text style={styles.muted}>Sonuç bulunamadı.</Text>} />
             </View>
           )}
@@ -193,13 +282,16 @@ export default function App() {
           {tab === "edit" && (
             <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === "ios" ? "padding" : undefined}>
               <ScrollView contentContainerStyle={styles.editor}>
-                <Text style={styles.sectionTitle}>{editingId ? "Notu düzenle" : "Yeni not"}</Text>
+                <Text style={styles.sectionTitle}>{editingId ? "Başlığı / entry'yi düzenle" : "Yeni başlık aç"}</Text>
                 <Text style={styles.label}>Başlık</Text>
                 <TextInput value={draftTitle} onChangeText={setDraftTitle} style={styles.input} placeholder="Örn. B-tree Index" placeholderTextColor="#7C8798" />
-                <Text style={styles.label}>Markdown içeriği</Text>
-                <Text style={styles.hint}>Bağlantı biçimi: [[PostgreSQL]] · [[B-tree Index]]</Text>
-                <TextInput value={draftContent} onChangeText={setDraftContent} style={[styles.input, styles.contentInput]} multiline textAlignVertical="top" placeholder="# Kavram\n\n## Nedir?" placeholderTextColor="#7C8798" />
-                <Pressable style={styles.primaryWide} onPress={saveNote}><Text style={styles.primaryButtonText}>Markdown dosyasına kaydet</Text></Pressable>
+                <Text style={styles.label}>Etiketler</Text>
+                <TextInput value={draftTags} onChangeText={setDraftTags} style={styles.input} placeholder="örn. react-native, performans, mimari" placeholderTextColor="#7C8798" autoCapitalize="none" />
+                <Text style={styles.hint}>Etiketleri virgülle ayır. Örn. react-native, performans, mimari</Text>
+                <Text style={styles.label}>Entry</Text>
+                <Text style={styles.hint}>Düz metin yaz. Daha önce başlık olarak açılmış bir kelime veya ifade entry içinde geçtiğinde otomatik tıklanabilir bağlantıya dönüşür. İstersen Markdown biçimlendirmesini de kullanabilirsin.</Text>
+                <TextInput value={draftContent} onChangeText={setDraftContent} style={[styles.input, styles.contentInput]} multiline textAlignVertical="top" placeholder="Entry'ni yaz…" placeholderTextColor="#7C8798" />
+                <Pressable style={styles.primaryWide} onPress={saveNote}><Text style={styles.primaryButtonText}>Entry'yi kaydet</Text></Pressable>
                 <Text style={styles.muted}>Dosyalar uygulamanın yerel belge dizininde tutulur: {vaultPath}</Text>
               </ScrollView>
             </KeyboardAvoidingView>
@@ -227,7 +319,7 @@ function GraphView({ notes, active, onOpen, width }: { notes: Note[]; active?: N
       <Text style={styles.muted}>Bir düğüme dokunarak sayfayı aç. MVP görünümü ilk 28 notu gösterir.</Text>
       <View style={{ width: w, height: h, marginTop: 12 }}>
         <Svg width={w} height={h} style={StyleSheet.absoluteFill}>
-          {positions.flatMap(p => p.note.links.map(link => {
+          {positions.flatMap(p => linkedTitles(p.note.content, notes, p.note.title).map(link => {
             const target = posByTitle.get(link.toLocaleLowerCase("tr-TR"));
             if (!target || p.note.id >= target.note.id) return [];
             return <Line key={`${p.note.id}-${target.note.id}`} x1={p.x} y1={p.y} x2={target.x} y2={target.y} stroke="#334155" strokeWidth={1.2} />;
@@ -244,7 +336,7 @@ function GraphView({ notes, active, onOpen, width }: { notes: Note[]; active?: N
           </Pressable>
         ))}
       </View>
-      <Text style={styles.hint}>Bağlantılar `[[Sayfa Başlığı]]` biçiminden otomatik çıkarılır. Daha fazla not için aramayı kullan.</Text>
+      <Text style={styles.hint}>Başlıklar, entry metinlerinde geçtiğinde otomatik olarak ilişkilendirilir. Daha fazla başlık için aramayı kullan.</Text>
     </ScrollView>
   );
 }
@@ -298,6 +390,12 @@ const styles = StyleSheet.create({
   resultRow: { paddingHorizontal: 18, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: "#1E293B" },
   resultTitle: { color: "#F8FAFC", fontSize: 16, fontWeight: "700" },
   resultMeta: { color: "#94A3B8", fontSize: 12, lineHeight: 18, marginTop: 5 },
+  tagLine: { color: "#86EFAC", fontSize: 11, lineHeight: 17, marginTop: 7 },
+  tagFilters: { paddingHorizontal: 16, paddingBottom: 8, gap: 7, alignItems: "center" },
+  filterChip: { borderColor: "#334155", borderWidth: 1, borderRadius: 99, paddingHorizontal: 11, paddingVertical: 7, backgroundColor: "#111720" },
+  filterChipActive: { borderColor: "#22C55E", backgroundColor: "#162D20" },
+  filterChipText: { color: "#94A3B8", fontSize: 12, fontWeight: "600" },
+  filterChipTextActive: { color: "#86EFAC" },
   editor: { padding: 18, gap: 10 },
   label: { color: "#CBD5E1", fontWeight: "700", marginTop: 5 },
   hint: { color: "#64748B", fontSize: 12, lineHeight: 18, marginTop: 5, marginBottom: 8 },
