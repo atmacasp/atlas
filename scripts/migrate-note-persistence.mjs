@@ -69,10 +69,14 @@ replaceOnce(
   'const next = await noteService.getAll();'
 );
 
-replaceOnce(
-  "create/update persistence",
-  '    const id = editingId || slugify(title);\n    const file = id + ".md";\n    const tags = [...new Set(draftTags.split(",").map(tag => tag.trim().toLocaleLowerCase("tr-TR")).filter(Boolean))];\n    const tagLine = "tags: [" + tags.map(tag => JSON.stringify(tag)).join(", ") + "]";\n    const content = "---\\ntitle: \\"" + title.replace(/"/g, "\\'") + "\\"\\ntype: concept\\n" + tagLine + "\\nupdated: " + new Date().toISOString().slice(0, 10) + "\\n---\\n\\n" + stripFrontmatter(draftContent).trim() + "\\n";\n    try {\n      await FileSystem.writeAsStringAsync(VAULT_DIR + file, content, { encoding: FileSystem.EncodingType.UTF8 });\n      await refresh(id); setTab("wiki");',
-  '    const tags = [...new Set(draftTags.split(",").map(tag => tag.trim().toLocaleLowerCase("tr-TR")).filter(Boolean))];\n    const input = { title, content: stripFrontmatter(draftContent), tags };\n    try {\n      const saved = editingId\n        ? await noteService.update(editingId, input)\n        : await noteService.create(input);\n      await refresh(saved.id); setTab("wiki");'
+const createUpdatePattern = /    const id = editingId \\|\\| slugify\\(title\\);\\n    const file = id \\+ "\\.md";[\\s\\S]*?      await refresh\\(id\\); setTab\\("wiki"\\);/g;
+const createUpdateMatches = [...next.matchAll(createUpdatePattern)];
+if (createUpdateMatches.length !== 1) {
+  throw new Error(`Migration target not found or ambiguous: create/update persistence (matches: ${createUpdateMatches.length})`);
+}
+next = next.replace(
+  createUpdatePattern,
+  '    const tags = [...new Set(draftTags.split(",").map(tag => tag.trim().toLocaleLowerCase("tr-TR")).filter(Boolean))];\\n    const input = { title, content: stripFrontmatter(draftContent), tags };\\n    try {\\n      const saved = editingId\\n        ? await noteService.update(editingId, input)\\n        : await noteService.create(input);\\n      await refresh(saved.id); setTab("wiki");'
 );
 
 replaceOnce(
