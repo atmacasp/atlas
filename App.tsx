@@ -265,7 +265,7 @@ export default function App() {
         <View style={styles.flex}>
           {tab === "home" && <View style={styles.flex}>
             <View style={styles.sectionHeader}><Text style={styles.sectionHeading}>Tüm notlar</Text><Pressable onPress={() => navigate("tags")}><Text style={styles.smallActionText}>Etiketler ↗</Text></Pressable></View>
-            <FlatList data={sortedNotes} keyExtractor={n => n.id} renderItem={renderNoteRow} contentContainerStyle={styles.listContent} ListEmptyComponent={<EmptyState styles={styles} title="Henüz not yok" action="İlk notunu ekle" onPress={createNote} />} />
+            <FlatList data={sortedNotes} keyExtractor={n => n.id} renderItem={renderNoteRow} contentContainerStyle={styles.listContent} initialNumToRender={8} maxToRenderPerBatch={6} windowSize={7} removeClippedSubviews={Platform.OS === "android"} ListEmptyComponent={<EmptyState styles={styles} title="Henüz not yok" action="İlk notunu ekle" onPress={createNote} />} />
           </View>}
 
           {tab === "wiki" && active && <ScrollView contentContainerStyle={styles.page}>
@@ -287,7 +287,7 @@ export default function App() {
               {allTags.map(tag => { const selected = selectedTags.includes(tag); return <Pressable key={tag} onPress={() => setSelectedTags(current => selected ? current.filter(t => t !== tag) : [...current, tag])} style={[styles.filterChip, selected && styles.filterChipActive]}><Text style={[styles.filterChipText, selected && styles.filterChipTextActive]}>#{tag}</Text></Pressable>; })}
             </ScrollView>}
             <Text style={styles.resultCount}>{filtered.length} sonuç</Text>
-            <FlatList data={filtered} keyExtractor={n => n.id} renderItem={renderNoteRow} contentContainerStyle={styles.listContent} ListEmptyComponent={<EmptyState styles={styles} title="Sonuç bulunamadı" action="Aramayı temizle" onPress={() => { setQuery(""); setSelectedTags([]); }} />} />
+            <FlatList data={filtered} keyExtractor={n => n.id} renderItem={renderNoteRow} contentContainerStyle={styles.listContent} initialNumToRender={8} maxToRenderPerBatch={6} windowSize={7} removeClippedSubviews={Platform.OS === "android"} ListEmptyComponent={<EmptyState styles={styles} title="Sonuç bulunamadı" action="Aramayı temizle" onPress={() => { setQuery(""); setSelectedTags([]); }} />} />
           </View>}
 
           {tab === "graph" && <GraphView notes={notes} active={active} onOpen={openNote} width={width} styles={styles} isLight={isLight} linksByNote={relationshipTitles} />}
@@ -521,7 +521,7 @@ function createStyles(isLight: boolean) { return StyleSheet.create({
   toggleThumb: { width: 18, height: 18, borderRadius: 99, backgroundColor: (isLight ? "#1F2937" : "#E2E8F0") },
   toggleThumbOn: { alignSelf: "flex-end", backgroundColor: (isLight ? "#166534" : "#D9F99D") },
   profileHero: { alignItems: "center", paddingVertical: 24 },
-  avatar: { width: 72, height: 72, borderRadius: 24, backgroundColor: "#26351B", borderWidth: 1, borderColor: (isLight ? "#2E7D32" : "#4D7C0F"), alignItems: "center", justifyContent: "center", marginBottom: 12 },
+  avatar: { width: 72, height: 72, borderRadius: 24, backgroundColor: (isLight ? "#DCFCE7" : "#26351B"), borderWidth: 1, borderColor: (isLight ? "#2E7D32" : "#4D7C0F"), alignItems: "center", justifyContent: "center", marginBottom: 12 },
   avatarText: { color: (isLight ? "#166534" : "#D9F99D"), fontSize: 30, fontWeight: "800" },
   profileName: { color: (isLight ? "#17202C" : "#F8FAFC"), fontSize: 20, fontWeight: "800" },
   statsGrid: { flexDirection: "row", gap: 8, marginTop: 22 },
@@ -553,7 +553,7 @@ function createStyles(isLight: boolean) { return StyleSheet.create({
   drawerCreateText: { color: "#17200B", fontSize: 13, fontWeight: "800" },
   drawerSectionLabel: { color: (isLight ? "#64748B" : "#64748B"), fontSize: 10, fontWeight: "800", letterSpacing: 1.1, marginTop: 9, marginBottom: 8, marginLeft: 8 },
   drawerItem: { flexDirection: "row", alignItems: "center", gap: 11, paddingHorizontal: 11, paddingVertical: 11, borderRadius: 10, marginBottom: 3 },
-  drawerItemActive: { backgroundColor: "#202D18" },
+  drawerItemActive: { backgroundColor: (isLight ? "#ECFDF5" : "#202D18") },
   drawerGlyph: { width: 22, color: (isLight ? "#64748B" : "#94A3B8"), fontSize: 17, textAlign: "center" },
   drawerGlyphActive: { color: (isLight ? "#166534" : "#D9F99D") },
   drawerItemText: { flex: 1, color: (isLight ? "#4B5563" : "#B8C1CE"), fontSize: 13, fontWeight: "600" },
