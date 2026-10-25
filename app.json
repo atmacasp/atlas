@@ -1,0 +1,12 @@
+{
+  "expo": {
+    "name": "Atlas Knowledge Vault",
+    "slug": "atlas-knowledge-vault",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "dark",
+    "android": {
+      "package": "com.atlas.knowledgevault"
+    }
+  }
+}
