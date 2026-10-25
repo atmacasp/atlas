@@ -5,7 +5,9 @@
 export interface Note {
   readonly id: string;
   readonly title: string;
+  readonly file: string;
   readonly content: string;
+  readonly links: readonly string[];
   readonly tags: readonly string[];
 }
 
