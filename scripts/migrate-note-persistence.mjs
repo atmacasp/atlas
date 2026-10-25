@@ -69,15 +69,24 @@ replaceOnce(
   'const next = await noteService.getAll();'
 );
 
-const createUpdatePattern = /    const id = editingId \\|\\| slugify\\(title\\);\\n    const file = id \\+ "\\.md";[\\s\\S]*?      await refresh\\(id\\); setTab\\("wiki"\\);/g;
+const createUpdatePattern = new RegExp(
+  String.raw`    const id = editingId \\|\\| slugify\\(title\\);\\n    const file = id \\+ "\\.md";[\\s\\S]*?      await refresh\\(id\\); setTab\\("wiki"\\);`,
+  "g",
+);
 const createUpdateMatches = [...next.matchAll(createUpdatePattern)];
 if (createUpdateMatches.length !== 1) {
   throw new Error(`Migration target not found or ambiguous: create/update persistence (matches: ${createUpdateMatches.length})`);
 }
-next = next.replace(
-  createUpdatePattern,
-  '    const tags = [...new Set(draftTags.split(",").map(tag => tag.trim().toLocaleLowerCase("tr-TR")).filter(Boolean))];\\n    const input = { title, content: stripFrontmatter(draftContent), tags };\\n    try {\\n      const saved = editingId\\n        ? await noteService.update(editingId, input)\\n        : await noteService.create(input);\\n      await refresh(saved.id); setTab("wiki");'
-);
+const createUpdateReplacement = [
+  '    const tags = [...new Set(draftTags.split(",").map(tag => tag.trim().toLocaleLowerCase("tr-TR")).filter(Boolean))];',
+  '    const input = { title, content: stripFrontmatter(draftContent), tags };',
+  '    try {',
+  '      const saved = editingId',
+  '        ? await noteService.update(editingId, input)',
+  '        : await noteService.create(input);',
+  '      await refresh(saved.id); setTab("wiki");',
+].join("\\n");
+next = next.replace(createUpdatePattern, createUpdateReplacement);
 
 replaceOnce(
   "delete persistence",
