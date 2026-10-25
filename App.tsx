@@ -69,12 +69,13 @@ function linkifyKnownTitles(content: string, notes: Note[], sourceTitle: string)
     .sort((a, b) => b.length - a.length);
   return protectedChunks.map(chunk => {
     if (/^\[[^\]]*\]\([^)]*\)$/.test(chunk)) return chunk;
-    let result = chunk;
-    for (const title of titles) {
-      const pattern = new RegExp("(^|[^A-Za-z0-9_ÇĞİÖŞÜçğıöşü])(" + escapeRegExp(title) + ")(?=$|[^A-Za-z0-9_ÇĞİÖŞÜçğıöşü])", "giu");
-      result = result.replace(pattern, (_match, prefix: string, matched: string) => prefix + "[" + matched + "](wiki:" + encodeURIComponent(title) + ")");
-    }
-    return result;
+    if (!titles.length) return chunk;
+    const alternatives = titles.map(escapeRegExp).join("|");
+    const pattern = new RegExp("(^|[^A-Za-z0-9_ÇĞİÖŞÜçğıöşü])(" + alternatives + ")(?=$|[^A-Za-z0-9_ÇĞİÖŞÜçğıöşü])", "giu");
+    return chunk.replace(pattern, (_match, prefix: string, matched: string) => {
+      const canonical = titles.find(title => title.toLocaleLowerCase("tr-TR") === matched.toLocaleLowerCase("tr-TR")) || matched;
+      return prefix + "[" + matched + "](wiki:" + encodeURIComponent(canonical) + ")";
+    });
   }).join("");
 }
 
