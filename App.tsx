@@ -41,6 +41,43 @@ function stripFrontmatter(content: string) {
 function cleanMarkdown(content: string) {
   return stripFrontmatter(content).replace(/[#>*`\-\[\]!]/g, " ").replace(/\s+/g, " ").trim();
 }
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^$\\{}()|[\]\\]/g, "\\function parseNote(");
+}
+function linkedTitles(content: string, notes: Note[], sourceTitle: string): string[] {
+  const found = new Set(extractLinks(content).map(title => title.toLocaleLowerCase("tr-TR")));
+  const body = stripFrontmatter(content);
+  for (const note of notes) {
+    if (note.title.toLocaleLowerCase("tr-TR") === sourceTitle.toLocaleLowerCase("tr-TR")) continue;
+    const title = note.title.trim();
+    if (!title) continue;
+    const pattern = new RegExp("(^|[^\\\\p{L}\\\\p{N}_])" + escapeRegExp(title) + "(?=$|[^\\\\p{L}\\\\p{N}_])", "iu");
+    if (pattern.test(body)) found.add(title.toLocaleLowerCase("tr-TR"));
+  }
+  return notes.filter(note => found.has(note.title.toLocaleLowerCase("tr-TR"))).map(note => note.title);
+}
+function linkifyKnownTitles(content: string, notes: Note[], sourceTitle: string) {
+  const explicit = content.replace(WIKI_RE, (_match, raw: string) => {
+    const title = raw.trim();
+    return "[" + title + "](wiki:" + encodeURIComponent(title) + ")";
+  });
+  const protectedChunks = explicit.split(/(\\[[^\\]]*\\]\\([^)]*\\))/g);
+  const titles = notes
+    .filter(note => note.title.toLocaleLowerCase("tr-TR") !== sourceTitle.toLocaleLowerCase("tr-TR"))
+    .map(note => note.title.trim())
+    .filter(Boolean)
+    .sort((a, b) => b.length - a.length);
+  return protectedChunks.map(chunk => {
+    if (/^\\[[^\\]]*\\]\\([^)]*\\)$/.test(chunk)) return chunk;
+    let result = chunk;
+    for (const title of titles) {
+      const pattern = new RegExp("(^|[^\\\\p{L}\\\\p{N}_])(" + escapeRegExp(title) + ")(?=$|[^\\\\p{L}\\\\p{N}_])", "giu");
+      result = result.replace(pattern, (_match, prefix: string, matched: string) => prefix + "[" + matched + "](wiki:" + encodeURIComponent(title) + ")");
+    }
+    return result;
+  }).join("");
+}
+
 function parseNote(id: string, file: string, content: string): Note {
   return { id, file, content, title: titleFromMarkdown(content, file.replace(/\.md$/, "")), links: extractLinks(content), tags: extractTags(content) };
 }
@@ -104,7 +141,8 @@ export default function App() {
   }, [notes]);
   const backlinks = useMemo(() => {
     if (!active) return [];
-    return notes.filter(n => n.id !== active.id && n.links.some(l => l.toLocaleLowerCase("tr-TR") === active.title.toLocaleLowerCase("tr-TR")));
+    return notes.filter(n => n.id !== active.id && linkedTitles(n.content, notes, n.title)
+      .some(title => title.toLocaleLowerCase("tr-TR") === active.title.toLocaleLowerCase("tr-TR")));
   }, [notes, active]);
   const allTags = useMemo(() => [...new Set(notes.flatMap(n => n.tags))].sort((a, b) => a.localeCompare(b, "tr-TR")), [notes]);
   const filtered = useMemo(() => {
@@ -118,7 +156,7 @@ export default function App() {
 
   const openNote = (note: Note) => { setActiveId(note.id); setTab("wiki"); };
   const createNote = () => {
-    setEditingId(null); setDraftTitle(""); setDraftTags(""); setDraftContent("# Yeni kavram\n\n## Nedir?\n\n## Nasıl çalışır?\n\n## İlişkili kavramlar\n\n");
+    setEditingId(null); setDraftTitle(""); setDraftTags(""); setDraftContent("");
     setTab("edit");
   };
   const editNote = () => {
@@ -168,7 +206,7 @@ ${stripFrontmatter(draftContent).trim()}
         <Text style={styles.resultTitle}>{item.title}</Text>
         <Text style={styles.resultMeta} numberOfLines={3}>{snippet || "İçerik boş."}</Text>
         {item.tags.length > 0 && <Text style={styles.tagLine}>{item.tags.map(tag => `#${tag}`).join("  ")}</Text>}
-        <Text style={styles.resultMeta}>{item.links.length} bağlantı · {item.file}</Text>
+        <Text style={styles.resultMeta}>{linkedTitles(item.content, notes, item.title).length} bağlantı · {item.file}</Text>
       </Pressable>
     );
   };
@@ -181,7 +219,7 @@ ${stripFrontmatter(draftContent).trim()}
           <Text style={styles.brand}>ATLAS</Text>
           <Text style={styles.subtitle}>Kişisel ilişkisel bilgi ağı</Text>
         </View>
-        <Pressable style={styles.primaryButton} onPress={createNote}><Text style={styles.primaryButtonText}>＋ Not</Text></Pressable>
+        <Pressable style={styles.primaryButton} onPress={createNote}><Text style={styles.primaryButtonText}>＋ Başlık aç</Text></Pressable>
       </View>
       <View style={styles.tabs}>
         {([["wiki", "Wiki"], ["search", "Ara"], ["graph", "Graf"], ["edit", "Düzenle"]] as [Tab, string][]).map(([key, label]) => (
@@ -206,7 +244,7 @@ ${stripFrontmatter(draftContent).trim()}
                   else Alert.alert("Sayfa bulunamadı", `“${title}” başlıklı not henüz oluşturulmadı.`);
                   return false;
                 }}>
-                  {active.content.replace(/^---[\s\S]*?---\s*/, "").replace(/\[\[([^\]]+)\]\]/g, "[$1](wiki:$1)")}
+                  {linkifyKnownTitles(active.content.replace(/^---[\s\S]*?---\s*/, ""), notes, active.title)}
                 </Markdown>
               </View>
               <View style={styles.section}>
@@ -243,16 +281,16 @@ ${stripFrontmatter(draftContent).trim()}
           {tab === "edit" && (
             <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === "ios" ? "padding" : undefined}>
               <ScrollView contentContainerStyle={styles.editor}>
-                <Text style={styles.sectionTitle}>{editingId ? "Notu düzenle" : "Yeni not"}</Text>
+                <Text style={styles.sectionTitle}>{editingId ? "Başlığı / entry'yi düzenle" : "Yeni başlık aç"}</Text>
                 <Text style={styles.label}>Başlık</Text>
                 <TextInput value={draftTitle} onChangeText={setDraftTitle} style={styles.input} placeholder="Örn. B-tree Index" placeholderTextColor="#7C8798" />
                 <Text style={styles.label}>Etiketler</Text>
                 <TextInput value={draftTags} onChangeText={setDraftTags} style={styles.input} placeholder="örn. react-native, performans, mimari" placeholderTextColor="#7C8798" autoCapitalize="none" />
                 <Text style={styles.hint}>Etiketleri virgülle ayır. Örn. react-native, performans, mimari</Text>
-                <Text style={styles.label}>Markdown içeriği</Text>
-                <Text style={styles.hint}>Bağlantı biçimi: [[PostgreSQL]] · [[B-tree Index]]</Text>
-                <TextInput value={draftContent} onChangeText={setDraftContent} style={[styles.input, styles.contentInput]} multiline textAlignVertical="top" placeholder="# Kavram\n\n## Nedir?" placeholderTextColor="#7C8798" />
-                <Pressable style={styles.primaryWide} onPress={saveNote}><Text style={styles.primaryButtonText}>Markdown dosyasına kaydet</Text></Pressable>
+                <Text style={styles.label}>Entry</Text>
+                <Text style={styles.hint}>Düz metin yaz. Daha önce başlık olarak açılmış bir kelime veya ifade entry içinde geçtiğinde otomatik tıklanabilir bağlantıya dönüşür. İstersen Markdown biçimlendirmesini de kullanabilirsin.</Text>
+                <TextInput value={draftContent} onChangeText={setDraftContent} style={[styles.input, styles.contentInput]} multiline textAlignVertical="top" placeholder="Entry'ni yaz…" placeholderTextColor="#7C8798" />
+                <Pressable style={styles.primaryWide} onPress={saveNote}><Text style={styles.primaryButtonText}>Entry'yi kaydet</Text></Pressable>
                 <Text style={styles.muted}>Dosyalar uygulamanın yerel belge dizininde tutulur: {vaultPath}</Text>
               </ScrollView>
             </KeyboardAvoidingView>
@@ -280,7 +318,7 @@ function GraphView({ notes, active, onOpen, width }: { notes: Note[]; active?: N
       <Text style={styles.muted}>Bir düğüme dokunarak sayfayı aç. MVP görünümü ilk 28 notu gösterir.</Text>
       <View style={{ width: w, height: h, marginTop: 12 }}>
         <Svg width={w} height={h} style={StyleSheet.absoluteFill}>
-          {positions.flatMap(p => p.note.links.map(link => {
+          {positions.flatMap(p => linkedTitles(p.note.content, notes, p.note.title).map(link => {
             const target = posByTitle.get(link.toLocaleLowerCase("tr-TR"));
             if (!target || p.note.id >= target.note.id) return [];
             return <Line key={`${p.note.id}-${target.note.id}`} x1={p.x} y1={p.y} x2={target.x} y2={target.y} stroke="#334155" strokeWidth={1.2} />;
@@ -297,7 +335,7 @@ function GraphView({ notes, active, onOpen, width }: { notes: Note[]; active?: N
           </Pressable>
         ))}
       </View>
-      <Text style={styles.hint}>Bağlantılar `[[Sayfa Başlığı]]` biçiminden otomatik çıkarılır. Daha fazla not için aramayı kullan.</Text>
+      <Text style={styles.hint}>Başlıklar, entry metinlerinde geçtiğinde otomatik olarak ilişkilendirilir. Daha fazla başlık için aramayı kullan.</Text>
     </ScrollView>
   );
 }
