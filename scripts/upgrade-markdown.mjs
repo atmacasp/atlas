@@ -11,8 +11,14 @@ function replaceOnce(from, to, label) {
 
 replaceOnce(
   'import { SEED_NOTES, SeedNote } from "./src/seedNotes";',
-  'import { SEED_NOTES, SeedNote } from "./src/seedNotes";\nimport { canonicalWikiTarget, extractAtlasWikiLinks, linkifyWikiSyntax, preprocessAtlasMarkdown, wikiDisplayText } from "./src/atlasMarkdown";',
+  'import { SEED_NOTES, SeedNote } from "./src/seedNotes";\nimport { canonicalWikiTarget, extractAtlasWikiLinks, linkifyWikiSyntax, preprocessAtlasMarkdown } from "./src/atlasMarkdown";',
   "Atlas Markdown import"
+);
+
+replaceOnce(
+  'const WIKI_RE = /\\[\\[([^\\]]+)\\]\\]/g;\n',
+  '',
+  "legacy wiki regex"
 );
 
 replaceOnce(
@@ -25,12 +31,6 @@ replaceOnce(
   '  const explicit = content.replace(WIKI_RE, (_match, raw: string) => {\n    const title = raw.trim();\n    return "[" + title + "](wiki:" + encodeURIComponent(title) + ")";\n  });',
   '  const explicit = linkifyWikiSyntax(content);',
   "wiki link rendering"
-);
-
-replaceOnce(
-  '    if (/^\\[[^\\]]*\\]\\([^)]*\\)$/.test(chunk)) return chunk;',
-  '    if (/^\\[[^\\]]*\\]\\([^)]*\\)$/.test(chunk)) return chunk;',
-  "protected markdown links"
 );
 
 replaceOnce(
@@ -51,12 +51,6 @@ replaceOnce(
   "markdown snippets"
 );
 
-replaceOnce(
-  '  const titles = notes\n    .filter(note => note.title.toLocaleLowerCase("tr-TR") !== sourceTitle.toLocaleLowerCase("tr-TR"))',
-  '  const titles = notes\n    .filter(note => note.title.toLocaleLowerCase("tr-TR") !== sourceTitle.toLocaleLowerCase("tr-TR"))',
-  "known title filter"
-);
-
 fs.writeFileSync(path, source);
 console.log("Atlas Markdown reader upgrade applied to App.tsx");
-console.log("Added: wiki aliases [[Target|display]], task lists, and callout preprocessing.");
+console.log("Added: wiki aliases [[Target|display]], task lists, and GitHub-style callouts.");
