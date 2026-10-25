@@ -402,10 +402,13 @@ function GraphView({ notes, active, onOpen, width, styles, isLight, linksByNote 
 }
 
 function createMarkdownStyles(isLight: boolean) { return {
-  body: { color: (isLight ? "#253044" : "#D8DEE9"), fontSize: 15, lineHeight: 24 },
+  body: { color: (isLight ? "#253044" : "#D8DEE9"), fontSize: 16, lineHeight: 27 },
   heading1: { color: (isLight ? "#17202C" : "#F8FAFC"), fontSize: 26, lineHeight: 34, fontWeight: "800" as const, marginTop: 22, marginBottom: 12, paddingBottom: 8, borderBottomWidth: 1, borderBottomColor: (isLight ? "#E2E8F0" : "#26303D") },
   heading2: { color: (isLight ? "#17202C" : "#F8FAFC"), fontSize: 21, lineHeight: 29, fontWeight: "800" as const, marginTop: 24, marginBottom: 9, paddingBottom: 5, borderBottomWidth: 1, borderBottomColor: (isLight ? "#E5E7EB" : "#26303D") },
   heading3: { color: (isLight ? "#1F2937" : "#E2E8F0"), fontSize: 18, lineHeight: 25, fontWeight: "800" as const, marginTop: 19, marginBottom: 7 },
+  heading4: { color: (isLight ? "#334155" : "#CBD5E1"), fontSize: 16, lineHeight: 23, fontWeight: "800" as const, marginTop: 16, marginBottom: 6 },
+  heading5: { color: (isLight ? "#334155" : "#CBD5E1"), fontSize: 15, lineHeight: 22, fontWeight: "700" as const, marginTop: 14, marginBottom: 5 },
+  heading6: { color: (isLight ? "#64748B" : "#94A3B8"), fontSize: 14, lineHeight: 21, fontWeight: "700" as const, marginTop: 12, marginBottom: 4 },
   paragraph: { marginTop: 5, marginBottom: 13, lineHeight: 27 },
   code_inline: { color: (isLight ? "#166534" : "#86EFAC"), backgroundColor: (isLight ? "#F0FDF4" : "#17211C"), fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace" },
   code_block: { color: (isLight ? "#1F2937" : "#D1FAE5"), backgroundColor: (isLight ? "#F1F5F9" : "#111820"), padding: 14, marginVertical: 10, borderRadius: 12, borderWidth: 1, borderColor: (isLight ? "#D7DEE8" : "#26303D"), fontSize: 13, lineHeight: 21, fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace" },
