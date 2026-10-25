@@ -51,7 +51,7 @@ function linkedTitles(content: string, notes: Note[], sourceTitle: string): stri
     if (note.title.toLocaleLowerCase("tr-TR") === sourceTitle.toLocaleLowerCase("tr-TR")) continue;
     const title = note.title.trim();
     if (!title) continue;
-    const pattern = new RegExp("(^|[^\\\\p{L}\\\\p{N}_])" + escapeRegExp(title) + "(?=$|[^\\\\p{L}\\\\p{N}_])", "iu");
+    const pattern = new RegExp("(^|[^A-Za-z0-9_ÇĞİÖŞÜçğıöşü])" + escapeRegExp(title) + "(?=$|[^A-Za-z0-9_ÇĞİÖŞÜçğıöşü])", "iu");
     if (pattern.test(body)) found.add(title.toLocaleLowerCase("tr-TR"));
   }
   return notes.filter(note => found.has(note.title.toLocaleLowerCase("tr-TR"))).map(note => note.title);
@@ -71,7 +71,7 @@ function linkifyKnownTitles(content: string, notes: Note[], sourceTitle: string)
     if (/^\[[^\]]*\]\([^)]*\)$/.test(chunk)) return chunk;
     let result = chunk;
     for (const title of titles) {
-      const pattern = new RegExp("(^|[^\\\\p{L}\\\\p{N}_])(" + escapeRegExp(title) + ")(?=$|[^\\\\p{L}\\\\p{N}_])", "giu");
+      const pattern = new RegExp("(^|[^A-Za-z0-9_ÇĞİÖŞÜçğıöşü])(" + escapeRegExp(title) + ")(?=$|[^A-Za-z0-9_ÇĞİÖŞÜçğıöşü])", "giu");
       result = result.replace(pattern, (_match, prefix: string, matched: string) => prefix + "[" + matched + "](wiki:" + encodeURIComponent(title) + ")");
     }
     return result;
@@ -87,7 +87,7 @@ function linkedTitles(content: string, notes: Note[], sourceTitle: string): stri
     if (note.title.toLocaleLowerCase("tr-TR") === sourceTitle.toLocaleLowerCase("tr-TR")) continue;
     const title = note.title.trim();
     if (!title) continue;
-    const pattern = new RegExp("(^|[^\\\\p{L}\\\\p{N}_])" + escapeRegExp(title) + "(?=$|[^\\\\p{L}\\\\p{N}_])", "iu");
+    const pattern = new RegExp("(^|[^A-Za-z0-9_ÇĞİÖŞÜçğıöşü])" + escapeRegExp(title) + "(?=$|[^A-Za-z0-9_ÇĞİÖŞÜçğıöşü])", "iu");
     if (pattern.test(body)) found.add(title.toLocaleLowerCase("tr-TR"));
   }
   return notes.filter(note => found.has(note.title.toLocaleLowerCase("tr-TR"))).map(note => note.title);
@@ -107,7 +107,7 @@ function linkifyKnownTitles(content: string, notes: Note[], sourceTitle: string)
     if (/^\\[[^\\]]*\\]\\([^)]*\\)$/.test(chunk)) return chunk;
     let result = chunk;
     for (const title of titles) {
-      const pattern = new RegExp("(^|[^\\\\p{L}\\\\p{N}_])(" + escapeRegExp(title) + ")(?=$|[^\\\\p{L}\\\\p{N}_])", "giu");
+      const pattern = new RegExp("(^|[^A-Za-z0-9_ÇĞİÖŞÜçğıöşü])(" + escapeRegExp(title) + ")(?=$|[^A-Za-z0-9_ÇĞİÖŞÜçğıöşü])", "giu");
       result = result.replace(pattern, (_match, prefix: string, matched: string) => prefix + "[" + matched + "](wiki:" + encodeURIComponent(title) + ")");
     }
     return result;
